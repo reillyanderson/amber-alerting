@@ -1,0 +1,364 @@
+﻿@{
+    Layout = "_Layout";
+}
+@{
+    ViewData["Title"] = "Alert Management";
+}
+
+<div class="container mt-4">
+    <div class="text-center mb-4">
+        <h1><i class="fas fa-exclamation-triangle text-warning"></i> AmberAlerting System</h1>
+        <p class="lead text-muted">A simple system for your alerting needs</p>
+    </div>
+    
+    <!-- Create Alert Form -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <i class="fas fa-plus-circle me-2"></i>Create New Alert
+        </div>
+        <div class="card-body">
+            <form id="alertForm">
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label fw-bold">Message:</label>
+                        <input type="text" id="message" class="form-control" placeholder="Enter your alert message..." required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-bold">Countdown (seconds):</label>
+                        <input type="number" id="countdown" class="form-control" min="1" placeholder="60" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-bell me-2"></i>Create Alert
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Alerts List -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-list me-2"></i>Active Alerts</span>
+            <button class="btn btn-sm btn-outline-dark" onclick="loadAlerts()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div id="alertsList">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let alertTimers = new Map(); // Store individual timers for each alert
+
+    // Load alerts from API
+    async function loadAlerts() {
+        try {
+            console.log('Loading alerts...');
+            const response = await fetch('/alerts');
+            const alerts = await response.json();
+            console.log('Received alerts:', alerts);
+            
+            const container = document.getElementById('alertsList');
+            
+            if (alerts.length === 0) {
+                // Clear all timers
+                alertTimers.forEach(timer => clearInterval(timer));
+                alertTimers.clear();
+                container.innerHTML = '<div class="text-center py-5 text-muted"><i class="fas fa-inbox fa-3x mb-3"></i><br><h5>No active alerts</h5><p>Create your first alert above!</p></div>';
+                return;
+            }
+            
+            // Clear existing timers for alerts that no longer exist
+            const currentAlertIds = new Set(alerts.map(a => a.id));
+            alertTimers.forEach((timer, alertId) => {
+                if (!currentAlertIds.has(alertId)) {
+                    clearInterval(timer);
+                    alertTimers.delete(alertId);
+                }
+            });
+            
+            container.innerHTML = alerts.map(alert => {
+                const isExpired = alert.countdown <= 0;
+                const alertClass = isExpired ? 'border-danger bg-danger-subtle' : 'border-info bg-info-subtle';
+                const countdownClass = isExpired ? 'text-danger' : 'text-primary';
+                const expiredIndicator = isExpired ? '<div class="mt-2"><span class="badge bg-danger blink px-3 py-2"><i class="fas fa-bell me-2"></i>TIME\'S UP!</span></div>' : '';
+                
+                return `
+                    <div class="alert-item border-start border-3 ${alertClass} m-3 rounded shadow-sm" id="alert-${alert.id}">
+                        <div class="row align-items-center">
+                            <!-- Main Content -->
+                            <div class="col-lg-8">
+                                <div class="p-3">
+                                    <h5 class="mb-2 fw-bold text-dark">
+                                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                        ${alert.message}
+                                    </h5>
+                                    
+                                    <!-- Prominent Countdown Display -->
+                                    <div class="countdown-section mb-3 p-3 bg-white rounded border">
+                                        <div class="row text-center">
+                                            <div class="col-6">
+                                                <div class="countdown-label text-muted small fw-bold">CURRENT TIME</div>
+                                                <div class="countdown-timer ${countdownClass}" id="countdown-${alert.id}">
+                                                    ${formatTime(alert.countdown)}
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="countdown-label text-muted small fw-bold">ORIGINAL TIME</div>
+                                                <div class="countdown-original">
+                                                    ${formatTime(alert.originalCountdown)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        ${expiredIndicator}
+                                    </div>
+                                    
+                                    <!-- Metadata -->
+                                    <div class="metadata text-muted small">
+                                        <div class="row">
+                                            <div class="col-sm-6 mb-1">
+                                                <i class="fas fa-hashtag me-1"></i>
+                                                <span class="fw-bold">ID:</span> <code>${alert.id}</code>
+                                            </div>
+                                            <div class="col-sm-6 mb-1">
+                                                <i class="fas fa-clock me-1"></i>
+                                                <span class="fw-bold">Created:</span> ${new Date(alert.createdAt).toLocaleString()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Actions -->
+                            <div class="col-lg-4">
+                                <div class="text-center p-3">
+                                    <button class="btn btn-danger btn-lg" onclick="deleteAlert('${alert.id}')" 
+                                            title="Delete this alert">
+                                        <i class="fas fa-trash-alt me-2"></i>Delete Alert
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Start individual timers for all alerts
+            alerts.forEach(alert => {
+                startAlertTimer(alert);
+            });
+            
+        } catch (error) {
+            console.error('Error loading alerts:', error);
+            document.getElementById('alertsList').innerHTML = '<div class="text-center py-5 text-danger"><i class="fas fa-exclamation-triangle fa-3x mb-3"></i><br><h5>Error loading alerts</h5><p>Please try refreshing the page.</p></div>';
+        }
+    }
+
+    // Start timer for individual alert
+    function startAlertTimer(alert) {
+        // Clear existing timer for this alert
+        if (alertTimers.has(alert.id)) {
+            clearInterval(alertTimers.get(alert.id));
+        }
+        
+        // Calculate client-side countdown based on creation time
+        const createdAt = new Date(alert.createdAt);
+        const originalCountdown = alert.originalCountdown;
+        
+        const timer = setInterval(() => {
+            const now = new Date();
+            const elapsedSeconds = Math.floor((now - createdAt) / 1000);
+            const remainingSeconds = Math.max(0, originalCountdown - elapsedSeconds);
+            
+            const countdownElement = document.getElementById(`countdown-${alert.id}`);
+            if (countdownElement) {
+                countdownElement.textContent = formatTime(remainingSeconds);
+                
+                // Check if time's up
+                if (remainingSeconds <= 0) {
+                    // Update styling when expired
+                    const alertDiv = document.getElementById(`alert-${alert.id}`);
+                    if (alertDiv && !alertDiv.innerHTML.includes("TIME'S UP!")) {
+                        alertDiv.classList.remove('border-info', 'bg-info-subtle');
+                        alertDiv.classList.add('border-danger', 'bg-danger-subtle');
+                        
+                        countdownElement.classList.remove('text-primary');
+                        countdownElement.classList.add('text-danger');
+                        
+                        // Add the TIME'S UP badge
+                        const countdownSection = alertDiv.querySelector('.countdown-section');
+                        if (countdownSection && !countdownSection.innerHTML.includes("TIME'S UP!")) {
+                            const expiredBadge = document.createElement('div');
+                            expiredBadge.className = 'mt-2';
+                            expiredBadge.innerHTML = '<span class="badge bg-danger blink px-3 py-2"><i class="fas fa-bell me-2"></i>TIME\'S UP!</span>';
+                            countdownSection.appendChild(expiredBadge);
+                        }
+                    }
+                }
+            } else {
+                // Element removed, clear timer
+                clearInterval(timer);
+                alertTimers.delete(alert.id);
+            }
+        }, 1000);
+        
+        alertTimers.set(alert.id, timer);
+    }
+
+    // Format seconds as MM:SS
+    function formatTime(seconds) {
+        if (seconds <= 0) return '00:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // Create new alert
+    document.getElementById('alertForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const message = document.getElementById('message').value;
+        const countdown = parseInt(document.getElementById('countdown').value);
+        
+        console.log('Creating alert:', { message, countdown });
+        
+        try {
+            const response = await fetch('/alerts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, countdown })
+            });
+            
+            if (response.ok) {
+                console.log('Alert created successfully');
+                document.getElementById('alertForm').reset();
+                loadAlerts();
+            } else {
+                console.error('Error response:', response.status);
+                alert('Error creating alert');
+            }
+        } catch (error) {
+            console.error('Error creating alert:', error);
+            alert('Error creating alert');
+        }
+    });
+
+    // Delete alert
+    async function deleteAlert(id) {
+        if (confirm('Delete this alert?')) {
+            try {
+                const response = await fetch(`/alerts/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    // Clear the timer for this alert
+                    if (alertTimers.has(id)) {
+                        clearInterval(alertTimers.get(id));
+                        alertTimers.delete(id);
+                    }
+                    loadAlerts();
+                }
+            } catch (error) {
+                console.error('Error deleting alert:', error);
+            }
+        }
+    }
+
+    // Load alerts on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Page loaded, loading alerts...');
+        loadAlerts();
+    });
+    
+    // Auto-refresh every 60 seconds (less frequent since we have real-time countdown)
+    setInterval(loadAlerts, 60000);
+
+    // Cleanup timers when page unloads
+    window.addEventListener('beforeunload', function() {
+        alertTimers.forEach(timer => clearInterval(timer));
+    });
+</script>
+
+<style>
+    .alert-item {
+        transition: all 0.3s ease;
+        background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9));
+    }
+    
+    .alert-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
+    }
+    
+    .countdown-timer {
+        font-family: 'Courier New', monospace;
+        font-weight: 900;
+        font-size: 2.5rem;
+        letter-spacing: 2px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+    
+    .countdown-original {
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        font-size: 1.5rem;
+        color: #6c757d;
+    }
+    
+    .countdown-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .countdown-section {
+        border: 2px dashed #dee2e6 !important;
+        transition: all 0.3s ease;
+    }
+    
+    .alert-item:hover .countdown-section {
+        border-color: #adb5bd !important;
+        background-color: #f8f9fa !important;
+    }
+    
+    .metadata {
+        border-top: 1px solid #dee2e6;
+        padding-top: 0.75rem !important;
+    }
+    
+    .metadata code {
+        background-color: #f8f9fa;
+        color: #6f42c1;
+        font-size: 0.8rem;
+    }
+    
+    .blink {
+        animation: blink 1.5s infinite;
+    }
+    
+    @@keyframes blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0.4; }
+    }
+    
+    .badge.blink {
+        box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+    }
+    
+    /* Enhanced visual hierarchy */
+    .bg-info-subtle {
+        background-color: rgba(13, 202, 240, 0.1) !important;
+    }
+    
+    .bg-danger-subtle {
+        background-color: rgba(220, 53, 69, 0.1) !important;
+    }
+    
+    .border-info {
+        border-color: #0dcaf0 !important;
+    }
+    
+    .border-danger {
+        border-color: #dc3545 !important;
+    }
+</style>

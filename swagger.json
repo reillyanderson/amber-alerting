@@ -1,0 +1,174 @@
+﻿{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "AmberAlerting API",
+    "description": "A simple alert management system.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://amberalerting.azurewebsites.net"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Alerts",
+      "description": "Operations related to alert lifecycle"
+    }
+  ],
+  "paths": {
+    "/alerts": {
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Get all alerts",
+        "operationId": "getAllAlerts",
+        "responses": {
+          "200": {
+            "description": "A list of alerts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Alert"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Create a new alert",
+        "operationId": "createAlert",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAlert"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Alert created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alerts/{id}": {
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Get alert by ID",
+        "operationId": "getAlertById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alert details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Alert not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Delete alert by ID",
+        "operationId": "deleteAlert",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Alert deleted"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Alert": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "countdown": {
+            "type": "integer",
+            "description": "Current countdown time in seconds"
+          },
+          "originalCountdown": {
+            "type": "integer",
+            "description": "Original countdown time when alert was created"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        }
+      },
+      "NewAlert": {
+        "type": "object",
+        "required": [
+          "message",
+          "countdown"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "countdown": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
