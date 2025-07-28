@@ -51,6 +51,71 @@
 
 <script>
     let alertTimers = new Map(); // Store individual timers for each alert
+    let alertSoundPlayed = new Set(); // Track which alerts have played their sound
+
+    // Initialize audio with multiple sound options
+    const alertSounds = {
+        chime: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAAAAAAA'),
+        bell: new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.wav'),
+        notification: new Audio('https://notificationsounds.com/storage/sounds/file-sounds-1150-pristine.ogg')
+    };
+
+    // Use a simple chime sound encoded as base64 (fallback)
+    const defaultAlertSound = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSyBzvLYiTcIG2m98OScTgwOUarm7blmFgU7k9n1unEiBC13yO/eizEIHWq+8+OWT' + 
+        'AsLVqzn87JlHAU2jdDv0IkwByte0/PkkEQHFGHC7eqfUgwKVqjj8LtyKAUqgNDy0ok3CBpnuuztm08MAlCs5O+1aB4GN5DY9Lh0KAUuhM/y3Ys3Bhplt+3snEwMAVWq4+6zYhwGOJLW8cx2KAUkdMrv3Y1AAhVdtOnqp1YPBlGj5vCuXh8GLYXJs+OKOAgZaLvt559NEAxQp+PwtmMcBjiP1/PMeS0GI3fH8N+RQAoUXrTp66hVFApGnt/yvmwhBCuBzvLZiTgIG2m98OScTgwOUqnl7blmFgU7k9n1unEiBC14yu7eizEIHWq+8+OWTAsLVqzn87Jl');
+    
+    // Try to use Web Audio API for better sound
+    function playAlertSound() {
+        try {
+            // Create a simple beep using Web Audio API
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create oscillators for a pleasant chime
+            const now = audioContext.currentTime;
+            
+            // First tone
+            const osc1 = audioContext.createOscillator();
+            const gainNode1 = audioContext.createGain();
+            osc1.connect(gainNode1);
+            gainNode1.connect(audioContext.destination);
+            osc1.frequency.value = 800;
+            gainNode1.gain.setValueAtTime(0.3, now);
+            gainNode1.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            osc1.start(now);
+            osc1.stop(now + 0.5);
+            
+            // Second tone
+            const osc2 = audioContext.createOscillator();
+            const gainNode2 = audioContext.createGain();
+            osc2.connect(gainNode2);
+            gainNode2.connect(audioContext.destination);
+            osc2.frequency.value = 1000;
+            gainNode2.gain.setValueAtTime(0.3, now + 0.2);
+            gainNode2.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+            osc2.start(now + 0.2);
+            osc2.stop(now + 0.7);
+            
+            // Third tone
+            const osc3 = audioContext.createOscillator();
+            const gainNode3 = audioContext.createGain();
+            osc3.connect(gainNode3);
+            gainNode3.connect(audioContext.destination);
+            osc3.frequency.value = 1200;
+            gainNode3.gain.setValueAtTime(0.3, now + 0.4);
+            gainNode3.gain.exponentialRampToValueAtTime(0.01, now + 0.9);
+            osc3.start(now + 0.4);
+            osc3.stop(now + 0.9);
+            
+        } catch (error) {
+            console.error('Error playing sound:', error);
+            // Fallback to default audio element
+            try {
+                defaultAlertSound.play().catch(e => console.error('Fallback audio failed:', e));
+            } catch (e) {
+                console.error('All audio methods failed:', e);
+            }
+        }
+    }
 
     // Load alerts from API
     async function loadAlerts() {
@@ -66,6 +131,7 @@
                 // Clear all timers
                 alertTimers.forEach(timer => clearInterval(timer));
                 alertTimers.clear();
+                alertSoundPlayed.clear();
                 container.innerHTML = '<div class="text-center py-5 text-muted"><i class="fas fa-inbox fa-3x mb-3"></i><br><h5>No active alerts</h5><p>Create your first alert above!</p></div>';
                 return;
             }
@@ -76,6 +142,7 @@
                 if (!currentAlertIds.has(alertId)) {
                     clearInterval(timer);
                     alertTimers.delete(alertId);
+                    alertSoundPlayed.delete(alertId);
                 }
             });
             
@@ -178,6 +245,12 @@
                 
                 // Check if time's up
                 if (remainingSeconds <= 0) {
+                    // Play sound only once per alert
+                    if (!alertSoundPlayed.has(alert.id)) {
+                        alertSoundPlayed.add(alert.id);
+                        playAlertSound();
+                    }
+                    
                     // Update styling when expired
                     const alertDiv = document.getElementById(`alert-${alert.id}`);
                     if (alertDiv && !alertDiv.innerHTML.includes("TIME'S UP!")) {
@@ -256,6 +329,7 @@
                         clearInterval(alertTimers.get(id));
                         alertTimers.delete(id);
                     }
+                    alertSoundPlayed.delete(id);
                     loadAlerts();
                 }
             } catch (error) {
